@@ -151,7 +151,9 @@
 }
 
 /* Android / Capacitor touch and viewport polish */
-html, body, #root {
+html,
+body,
+#root {
   width: 100%;
   min-height: 100%;
   overscroll-behavior: none;
@@ -162,8 +164,54 @@ body {
   touch-action: manipulation;
   -webkit-user-select: none;
   user-select: none;
+  overflow: hidden;
 }
 
-button, [role="button"] {
+button,
+[role="button"] {
   touch-action: manipulation;
+}
+
+.td-app {
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+  padding-right: max(0.5rem, env(safe-area-inset-right));
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  padding-left: max(0.5rem, env(safe-area-inset-left));
+  background:
+    radial-gradient(circle at 50% -20%, oklch(0.34 0.1 260 / 50%), transparent 42%),
+    var(--background);
+}
+
+@media (max-width: 420px) {
+  .td-app {
+    grid-template-rows: 48px minmax(0, 1fr) 174px 48px;
+  }
+  .td-app > :first-child {
+    gap: 0.25rem;
+  }
+  .td-app > :first-child button {
+    padding-inline: 0.35rem;
+    font-size: 9px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 560px) {
+  .td-app {
+    grid-template-columns: minmax(0, 1fr) 190px;
+    grid-template-rows: 42px minmax(0, 1fr) 44px;
+  }
+  .td-app > :first-child {
+    grid-column: 1 / -1;
+  }
+  .td-app > :nth-child(2) {
+    grid-row: 2;
+  }
+  .td-app > :nth-child(3) {
+    grid-column: 2;
+    grid-row: 2 / 4;
+  }
+  .td-app > :nth-child(4) {
+    grid-column: 1;
+    grid-row: 3;
+  }
 }

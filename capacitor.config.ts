@@ -1,9 +1,9 @@
-import type { CapacitorConfig } from '@capacitor/cli';
+import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: 'com.marinpaunovic.towerdefense',
-  appName: 'Tower Defense',
-  webDir: '.output/public',
+  appId: "com.marinpaunovic.towerdefense",
+  appName: "Tower Defense",
+  webDir: ".output/public",
   bundledWebRuntime: false,
   android: {
     allowMixedContent: false,
@@ -12,7 +12,7 @@ const config: CapacitorConfig = {
     SplashScreen: {
       launchAutoHide: true,
       launchShowDuration: 900,
-      backgroundColor: '#050816',
+      backgroundColor: "#050816",
       showSpinner: false,
     },
   },
