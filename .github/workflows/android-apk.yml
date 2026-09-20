@@ -59,3 +59,96 @@ jobs:
           cat > android-index.html <<'EOF'
           <!doctype html>
           <html lang="en">
+            <head>
+              <meta charset="UTF-8" />
+              <meta
+                name="viewport"
+                content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+              />
+              <meta name="theme-color" content="#050816" />
+              <meta name="mobile-web-app-capable" content="yes" />
+              <meta name="apple-mobile-web-app-capable" content="yes" />
+              <title>Tower Defense</title>
+            </head>
+            <body>
+              <div id="root"></div>
+              <script type="module" src="/src/android-main.tsx"></script>
+            </body>
+          </html>
+          EOF
+
+      - name: Create Android Vite config
+        run: |
+          cat > android.vite.config.ts <<'EOF'
+          import { defineConfig } from "vite";
+          import react from "@vitejs/plugin-react";
+          import tailwindcss from "@tailwindcss/vite";
+          import tsconfigPaths from "vite-tsconfig-paths";
+
+          export default defineConfig({
+            plugins: [
+              react(),
+              tailwindcss(),
+              tsconfigPaths(),
+            ],
+            build: {
+              outDir: "dist",
+              emptyOutDir: true,
+            },
+          });
+          EOF
+
+      - name: Build static Android web app
+        run: |
+          cp android-index.html index.html
+          npx vite build --config android.vite.config.ts
+          test -f dist/index.html
+
+      - name: Configure Capacitor
+        run: |
+          cat > capacitor.config.ts <<'EOF'
+          import type { CapacitorConfig } from "@capacitor/cli";
+
+          const config: CapacitorConfig = {
+            appId: "com.marinpaunovic.towerdefense",
+            appName: "Tower Defense",
+            webDir: "dist",
+            bundledWebRuntime: false,
+            android: {
+              allowMixedContent: false,
+            },
+            plugins: {
+              SplashScreen: {
+                launchAutoHide: true,
+                launchShowDuration: 900,
+                backgroundColor: "#050816",
+                showSpinner: false,
+              },
+            },
+          };
+
+          export default config;
+          EOF
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Verify APK exists
+        run: |
+          ls -lh android/app/build/outputs/apk/debug/app-debug.apk
+          test -f android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: tower-defense-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
