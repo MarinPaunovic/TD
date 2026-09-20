@@ -28,9 +28,10 @@ npm run dev
 - React
 - Tailwind CSS
 
-## AI polish pass
+## Command protocol upgrade
 
 This version includes a visual/game-feel polish pass focused on combat feedback and mobile presentation:
+
 - floating damage and reward numbers
 - expanding impact/fusion shockwaves
 - stronger hit, death and boss effects
@@ -41,4 +42,10 @@ This version includes a visual/game-feel polish pass focused on combat feedback 
 - slightly more spacious mobile HUD cards
 - particle drag and richer particle bursts
 
-The core game architecture and existing mechanics were preserved.
+The core game architecture and existing mechanics were preserved and extended with:
+
+- capped visual-effect pools for stable low-end Android frame times
+- explicit run results, session statistics, safe best-wave persistence and a manual restart flow
+- safe background-tab pause behavior, sound toggle, synthesized zero-asset combat SFX
+- responsive safe-area-aware mobile/landscape controls and clearer touch targets
+- an honest 1v1 lobby and network contract; it never pretends a bot is online. See [MULTIPLAYER.md](MULTIPLAYER.md) for the required authoritative backend configuration.

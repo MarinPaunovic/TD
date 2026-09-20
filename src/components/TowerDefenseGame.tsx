@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { GameAudio } from "@/lib/game-audio";
+import { multiplayerConfigured, normalizeRoomCode } from "@/lib/multiplayer";
 import gruntImg from "@/assets/enemy-grunt.png";
 import runnerImg from "@/assets/enemy-runner.png";
 import tankImg from "@/assets/enemy-tank.png";
@@ -22,15 +24,33 @@ const SCALE = 2;
 const MAX_LEVEL = 10;
 
 const PATH: { x: number; y: number }[] = [
-  { x: 0, y: 1 }, { x: 3, y: 1 }, { x: 3, y: 4 }, { x: 1, y: 4 },
-  { x: 1, y: 8 }, { x: 5, y: 8 }, { x: 5, y: 5 }, { x: 8, y: 5 },
-  { x: 8, y: 10 }, { x: 3, y: 10 }, { x: 3, y: 13 }, { x: 10, y: 13 },
-  { x: 10, y: 16 }, { x: 11, y: 16 },
+  { x: 0, y: 1 },
+  { x: 3, y: 1 },
+  { x: 3, y: 4 },
+  { x: 1, y: 4 },
+  { x: 1, y: 8 },
+  { x: 5, y: 8 },
+  { x: 5, y: 5 },
+  { x: 8, y: 5 },
+  { x: 8, y: 10 },
+  { x: 3, y: 10 },
+  { x: 3, y: 13 },
+  { x: 10, y: 13 },
+  { x: 10, y: 16 },
+  { x: 11, y: 16 },
 ];
 
 type TowerType =
-  | "basic" | "sniper" | "splash" | "slow"
-  | "railgun" | "flak" | "cryoshot" | "artillery" | "glacier" | "blizzard";
+  | "basic"
+  | "sniper"
+  | "splash"
+  | "slow"
+  | "railgun"
+  | "flak"
+  | "cryoshot"
+  | "artillery"
+  | "glacier"
+  | "blizzard";
 
 interface TowerSpec {
   name: string;
@@ -46,28 +66,145 @@ interface TowerSpec {
   slowDur: number;
 }
 
-const spec = (s: Partial<TowerSpec> & { name: string; cost: number; range: number; damage: number; fireRate: number; color: string; desc: string }): TowerSpec => ({
-  buildable: false, splash: 0, slow: 1, slowDur: 0, ...s,
+const spec = (
+  s: Partial<TowerSpec> & {
+    name: string;
+    cost: number;
+    range: number;
+    damage: number;
+    fireRate: number;
+    color: string;
+    desc: string;
+  },
+): TowerSpec => ({
+  buildable: false,
+  splash: 0,
+  slow: 1,
+  slowDur: 0,
+  ...s,
 });
 
 const TOWER_TYPES: Record<TowerType, TowerSpec> = {
-  basic: spec({ name: "Turret", cost: 50, range: 2.8, damage: 18, fireRate: 550, color: "#4f8cff", desc: "Fast, cheap", buildable: true }),
-  sniper: spec({ name: "Sniper", cost: 120, range: 5.5, damage: 80, fireRate: 1600, color: "#ff7a45", desc: "Long range", buildable: true }),
-  splash: spec({ name: "Mortar", cost: 175, range: 3.5, damage: 35, fireRate: 1300, color: "#3ddc84", desc: "Area damage", buildable: true, splash: 1.6 }),
-  slow: spec({ name: "Frost", cost: 100, range: 3.2, damage: 6, fireRate: 800, color: "#49d6e8", desc: "Slows enemies", buildable: true, slow: 0.5, slowDur: 1500 }),
+  basic: spec({
+    name: "Turret",
+    cost: 50,
+    range: 2.8,
+    damage: 18,
+    fireRate: 550,
+    color: "#4f8cff",
+    desc: "Fast, cheap",
+    buildable: true,
+  }),
+  sniper: spec({
+    name: "Sniper",
+    cost: 120,
+    range: 5.5,
+    damage: 80,
+    fireRate: 1600,
+    color: "#ff7a45",
+    desc: "Long range",
+    buildable: true,
+  }),
+  splash: spec({
+    name: "Mortar",
+    cost: 175,
+    range: 3.5,
+    damage: 35,
+    fireRate: 1300,
+    color: "#3ddc84",
+    desc: "Area damage",
+    buildable: true,
+    splash: 1.6,
+  }),
+  slow: spec({
+    name: "Frost",
+    cost: 100,
+    range: 3.2,
+    damage: 6,
+    fireRate: 800,
+    color: "#49d6e8",
+    desc: "Slows enemies",
+    buildable: true,
+    slow: 0.5,
+    slowDur: 1500,
+  }),
 
-  railgun: spec({ name: "Railgun", cost: 0, range: 6.2, damage: 130, fireRate: 900, color: "#c86bff", desc: "Turret + Sniper" }),
-  flak: spec({ name: "Flak", cost: 0, range: 3.8, damage: 46, fireRate: 620, color: "#7dffb0", desc: "Turret + Mortar", splash: 1.5 }),
-  cryoshot: spec({ name: "Cryoshot", cost: 0, range: 3.6, damage: 30, fireRate: 480, color: "#8fd8ff", desc: "Turret + Frost", slow: 0.55, slowDur: 1200 }),
-  artillery: spec({ name: "Artillery", cost: 0, range: 6.0, damage: 110, fireRate: 1500, color: "#ffb03a", desc: "Sniper + Mortar", splash: 2.2 }),
-  glacier: spec({ name: "Glacier", cost: 0, range: 6.0, damage: 70, fireRate: 1400, color: "#6ea8ff", desc: "Sniper + Frost", slow: 0.35, slowDur: 2000 }),
-  blizzard: spec({ name: "Blizzard", cost: 0, range: 4.0, damage: 45, fireRate: 1100, color: "#b9f2ff", desc: "Mortar + Frost", splash: 2.0, slow: 0.4, slowDur: 1800 }),
+  railgun: spec({
+    name: "Railgun",
+    cost: 0,
+    range: 6.2,
+    damage: 130,
+    fireRate: 900,
+    color: "#c86bff",
+    desc: "Turret + Sniper",
+  }),
+  flak: spec({
+    name: "Flak",
+    cost: 0,
+    range: 3.8,
+    damage: 46,
+    fireRate: 620,
+    color: "#7dffb0",
+    desc: "Turret + Mortar",
+    splash: 1.5,
+  }),
+  cryoshot: spec({
+    name: "Cryoshot",
+    cost: 0,
+    range: 3.6,
+    damage: 30,
+    fireRate: 480,
+    color: "#8fd8ff",
+    desc: "Turret + Frost",
+    slow: 0.55,
+    slowDur: 1200,
+  }),
+  artillery: spec({
+    name: "Artillery",
+    cost: 0,
+    range: 6.0,
+    damage: 110,
+    fireRate: 1500,
+    color: "#ffb03a",
+    desc: "Sniper + Mortar",
+    splash: 2.2,
+  }),
+  glacier: spec({
+    name: "Glacier",
+    cost: 0,
+    range: 6.0,
+    damage: 70,
+    fireRate: 1400,
+    color: "#6ea8ff",
+    desc: "Sniper + Frost",
+    slow: 0.35,
+    slowDur: 2000,
+  }),
+  blizzard: spec({
+    name: "Blizzard",
+    cost: 0,
+    range: 4.0,
+    damage: 45,
+    fireRate: 1100,
+    color: "#b9f2ff",
+    desc: "Mortar + Frost",
+    splash: 2.0,
+    slow: 0.4,
+    slowDur: 1800,
+  }),
 };
 
 const TOWER_ART: Record<TowerType, string> = {
-  basic: artBasic, sniper: artSniper, splash: artSplash, slow: artSlow,
-  railgun: artRailgun, flak: artFlak, cryoshot: artCryoshot,
-  artillery: artArtillery, glacier: artGlacier, blizzard: artBlizzard,
+  basic: artBasic,
+  sniper: artSniper,
+  splash: artSplash,
+  slow: artSlow,
+  railgun: artRailgun,
+  flak: artFlak,
+  cryoshot: artCryoshot,
+  artillery: artArtillery,
+  glacier: artGlacier,
+  blizzard: artBlizzard,
 };
 
 const towerSpriteCache: Partial<Record<TowerType, HTMLImageElement>> = {};
@@ -100,30 +237,87 @@ type EnemyClass = "light" | "normal" | "heavy" | "flying" | "boss";
 type EnemyType = "runner" | "grunt" | "tank" | "flyer" | "titan";
 
 interface EnemySpec {
-  name: string; cls: EnemyClass; hp: number; speed: number;
-  reward: number; size: number; sprite: string; tint: string; note: string;
+  name: string;
+  cls: EnemyClass;
+  hp: number;
+  speed: number;
+  reward: number;
+  size: number;
+  sprite: string;
+  tint: string;
+  note: string;
 }
 
 const ENEMY_TYPES: Record<EnemyType, EnemySpec> = {
-  runner: { name: "Runner", cls: "light", hp: 20, speed: 1.7, reward: 9, size: 0.52, sprite: runnerImg, tint: "#9ae44b", note: "Light · fast" },
-  grunt: { name: "Grunt", cls: "normal", hp: 48, speed: 1, reward: 11, size: 0.6, sprite: gruntImg, tint: "#ff6b6b", note: "Normal" },
-  tank: { name: "Tank", cls: "heavy", hp: 165, speed: 0.55, reward: 24, size: 0.8, sprite: tankImg, tint: "#ffa03a", note: "Heavy armor" },
-  flyer: { name: "Drone", cls: "flying", hp: 40, speed: 1.35, reward: 15, size: 0.62, sprite: flyerImg, tint: "#b36bff", note: "Flying" },
-  titan: { name: "Titan", cls: "boss", hp: 1100, speed: 0.45, reward: 180, size: 1.05, sprite: titanImg, tint: "#ff3b7b", note: "Boss" },
+  runner: {
+    name: "Runner",
+    cls: "light",
+    hp: 20,
+    speed: 1.7,
+    reward: 9,
+    size: 0.52,
+    sprite: runnerImg,
+    tint: "#9ae44b",
+    note: "Light · fast",
+  },
+  grunt: {
+    name: "Grunt",
+    cls: "normal",
+    hp: 48,
+    speed: 1,
+    reward: 11,
+    size: 0.6,
+    sprite: gruntImg,
+    tint: "#ff6b6b",
+    note: "Normal",
+  },
+  tank: {
+    name: "Tank",
+    cls: "heavy",
+    hp: 165,
+    speed: 0.55,
+    reward: 24,
+    size: 0.8,
+    sprite: tankImg,
+    tint: "#ffa03a",
+    note: "Heavy armor",
+  },
+  flyer: {
+    name: "Drone",
+    cls: "flying",
+    hp: 40,
+    speed: 1.35,
+    reward: 15,
+    size: 0.62,
+    sprite: flyerImg,
+    tint: "#b36bff",
+    note: "Flying",
+  },
+  titan: {
+    name: "Titan",
+    cls: "boss",
+    hp: 1100,
+    speed: 0.45,
+    reward: 180,
+    size: 1.05,
+    sprite: titanImg,
+    tint: "#ff3b7b",
+    note: "Boss",
+  },
 };
 
 // Counter system: how much damage each tower deals to each enemy class
 const DAMAGE_TABLE: Record<TowerType, Record<EnemyClass, number>> = {
-  basic:     { light: 1.4, normal: 1.1, heavy: 0.5, flying: 0.9, boss: 0.7 },
-  sniper:    { light: 0.7, normal: 1.0, heavy: 1.8, flying: 0.8, boss: 1.6 },
-  splash:    { light: 1.6, normal: 1.3, heavy: 0.8, flying: 0.4, boss: 0.9 },
-  slow:      { light: 1.0, normal: 1.0, heavy: 0.7, flying: 1.8, boss: 1.0 },
-  railgun:   { light: 0.9, normal: 1.1, heavy: 1.9, flying: 1.0, boss: 1.7 },
-  flak:      { light: 1.5, normal: 1.2, heavy: 0.7, flying: 2.0, boss: 0.9 },
-  cryoshot:  { light: 1.5, normal: 1.1, heavy: 0.6, flying: 1.6, boss: 0.9 },
+  basic: { light: 1.4, normal: 1.1, heavy: 0.5, flying: 0.9, boss: 0.7 },
+  sniper: { light: 0.7, normal: 1.0, heavy: 1.8, flying: 0.8, boss: 1.6 },
+  splash: { light: 1.6, normal: 1.3, heavy: 0.8, flying: 0.4, boss: 0.9 },
+  slow: { light: 1.0, normal: 1.0, heavy: 0.7, flying: 1.8, boss: 1.0 },
+  railgun: { light: 0.9, normal: 1.1, heavy: 1.9, flying: 1.0, boss: 1.7 },
+  flak: { light: 1.5, normal: 1.2, heavy: 0.7, flying: 2.0, boss: 0.9 },
+  cryoshot: { light: 1.5, normal: 1.1, heavy: 0.6, flying: 1.6, boss: 0.9 },
   artillery: { light: 1.2, normal: 1.3, heavy: 1.5, flying: 0.5, boss: 1.5 },
-  glacier:   { light: 0.9, normal: 1.1, heavy: 1.4, flying: 1.6, boss: 1.4 },
-  blizzard:  { light: 1.4, normal: 1.2, heavy: 1.0, flying: 1.5, boss: 1.1 },
+  glacier: { light: 0.9, normal: 1.1, heavy: 1.4, flying: 1.6, boss: 1.4 },
+  blizzard: { light: 1.4, normal: 1.2, heavy: 1.0, flying: 1.5, boss: 1.1 },
 };
 
 const bestVs = (t: TowerType) => {
@@ -153,7 +347,8 @@ const waveComposition = (wave: number): EnemyType[] => {
   return list;
 };
 
-const waveHpMultFor = (wave: number) => 3 * (1 + wave * 0.36 + Math.pow(Math.max(0, wave - 10), 1.75) * 0.08);
+const waveHpMultFor = (wave: number) =>
+  3 * (1 + wave * 0.36 + Math.pow(Math.max(0, wave - 10), 1.75) * 0.08);
 
 const spriteCache: Partial<Record<EnemyType, HTMLImageElement>> = {};
 const getSprite = (t: EnemyType): HTMLImageElement | null => {
@@ -217,19 +412,43 @@ interface Projectile {
 }
 
 interface Particle {
-  x: number; y: number; vx: number; vy: number;
-  life: number; maxLife: number; color: string; size: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  color: string;
+  size: number;
   drag?: number;
 }
 
 interface FloatingText {
-  x: number; y: number; text: string; color: string;
-  life: number; maxLife: number; vy: number; scale: number;
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+  life: number;
+  maxLife: number;
+  vy: number;
+  scale: number;
 }
 
 interface Shockwave {
-  x: number; y: number; radius: number; maxRadius: number;
-  life: number; maxLife: number; color: string;
+  x: number;
+  y: number;
+  radius: number;
+  maxRadius: number;
+  life: number;
+  maxLife: number;
+  color: string;
+}
+
+interface RunStats {
+  kills: number;
+  goldEarned: number;
+  bossKills: number;
+  towersBuilt: number;
 }
 
 const statsFor = (type: TowerType, level: number) => {
@@ -250,7 +469,13 @@ const upgradeCost = (tower: { type: TowerType; level: number }) => {
 let nextId = 1;
 
 interface Inspected {
-  id: number; type: TowerType; level: number; damage: number; range: number; fireRate: number; invested: number;
+  id: number;
+  type: TowerType;
+  level: number;
+  damage: number;
+  range: number;
+  fireRate: number;
+  invested: number;
 }
 
 type ControlTab = "build" | "selected" | "guide";
@@ -270,20 +495,48 @@ export function TowerDefenseGame() {
   const [best, setBest] = useState(0);
   const [autoStart, setAutoStart] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [soundOn, setSoundOn] = useState(true);
+  const [runStats, setRunStats] = useState<RunStats>({
+    kills: 0,
+    goldEarned: 0,
+    bossKills: 0,
+    towersBuilt: 0,
+  });
+  const [gameOverWave, setGameOverWave] = useState<number | null>(null);
+  const [lobbyOpen, setLobbyOpen] = useState(false);
+  const [roomCode, setRoomCode] = useState("");
 
   const speedRef = useRef(speed);
   speedRef.current = speed;
 
   const autoStartRef = useRef(autoStart);
   autoStartRef.current = autoStart;
+  const audioRef = useRef<GameAudio | null>(null);
+  if (!audioRef.current) audioRef.current = new GameAudio(soundOn);
+  const playSound = useCallback(
+    (sound: Parameters<GameAudio["play"]>[0]) => audioRef.current?.play(sound),
+    [],
+  );
 
   useEffect(() => {
-    const saved = Number(localStorage.getItem("td-best-wave") || 0);
-    if (saved > 0) setBest(saved);
+    audioRef.current?.setEnabled(soundOn);
+  }, [soundOn]);
+
+  useEffect(() => {
+    try {
+      const saved = Number(localStorage.getItem("td-best-wave") || 0);
+      if (Number.isFinite(saved) && saved > 0) setBest(saved);
+    } catch {
+      /* Private mode/storage restrictions must not block a session. */
+    }
   }, []);
 
   useEffect(() => {
-    if (best > 0) localStorage.setItem("td-best-wave", String(best));
+    try {
+      if (best > 0) localStorage.setItem("td-best-wave", String(best));
+    } catch {
+      /* optional persistence */
+    }
   }, [best]);
 
   const selectedRef = useRef(selectedTower);
@@ -321,6 +574,9 @@ export function TowerDefenseGame() {
     combo: 0,
     comboTimer: 0,
     dangerFlash: 0,
+    goldEarned: 0,
+    bossKills: 0,
+    towersBuilt: 0,
   });
 
   const showMessage = useCallback((text: string) => {
@@ -330,11 +586,23 @@ export function TowerDefenseGame() {
 
   const syncInspect = useCallback(() => {
     const t = state.current.towers.find((tw) => tw.id === state.current.inspectId);
-    setInspected(t ? { id: t.id, type: t.type, level: t.level, damage: t.damage, range: t.range, fireRate: t.fireRate, invested: t.invested } : null);
+    setInspected(
+      t
+        ? {
+            id: t.id,
+            type: t.type,
+            level: t.level,
+            damage: t.damage,
+            range: t.range,
+            fireRate: t.fireRate,
+            invested: t.invested,
+          }
+        : null,
+    );
   }, []);
 
   const startWave = useCallback(() => {
-    if (state.current.isPlaying || state.current.paused) return;
+    if (state.current.isPlaying || state.current.paused || gameOverWave !== null) return;
     state.current.isPlaying = true;
     state.current.wave += 1;
     const queue = waveComposition(state.current.wave);
@@ -349,7 +617,8 @@ export function TowerDefenseGame() {
     state.current.banner = 1200;
     state.current.bannerText = `WAVE ${state.current.wave}`;
     state.current.bannerColor = state.current.wave % 5 === 0 ? "#ff3b7b" : "#6ea8ff";
-  }, []);
+    playSound(state.current.wave % 5 === 0 ? "boss" : "waveStart");
+  }, [gameOverWave, playSound]);
 
   const togglePause = useCallback(() => {
     state.current.paused = !state.current.paused;
@@ -368,16 +637,23 @@ export function TowerDefenseGame() {
     const st = state.current;
     const t = st.towers.find((tw) => tw.id === st.inspectId);
     if (!t) return;
-    if (t.level >= MAX_LEVEL) { showMessage("Max level!"); return; }
+    if (t.level >= MAX_LEVEL) {
+      showMessage("Max level!");
+      return;
+    }
     const cost = upgradeCost(t);
-    if (st.money < cost) { showMessage("Not enough gold!"); return; }
+    if (st.money < cost) {
+      showMessage("Not enough gold!");
+      return;
+    }
     st.money -= cost;
     t.level += 1;
     t.invested += cost;
     applyStats(t);
+    playSound("upgrade");
     setMoney(st.money);
     syncInspect();
-  }, [showMessage, syncInspect]);
+  }, [playSound, showMessage, syncInspect]);
 
   const sell = useCallback(() => {
     const st = state.current;
@@ -393,76 +669,188 @@ export function TowerDefenseGame() {
     showMessage(`Sold for ${refund}g`);
   }, [showMessage]);
 
-  const fuseTowers = useCallback((sourceId: number, targetId: number) => {
-    const st = state.current;
-    const source = st.towers.find((t) => t.id === sourceId);
-    const target = st.towers.find((t) => t.id === targetId);
-    if (!source || !target || source.id === target.id) return;
-    const result = fusionFor(source.type, target.type);
-    if (!result) { showMessage("Those towers cannot fuse"); return; }
-    const cost = 75;
-    if (st.money < cost) { showMessage(`Fusion costs ${cost}g`); return; }
-    st.money -= cost;
-    const level = Math.max(1, Math.min(MAX_LEVEL, Math.max(source.level, target.level)));
-    const fused: Tower = {
-      id: nextId++, x: target.x, y: target.y, type: result, level,
-      range: 0, damage: 0, fireRate: 0, cooldown: 0, color: "#fff",
-      invested: source.invested + target.invested + cost, angle: -Math.PI / 2, flash: 200,
-    };
-    applyStats(fused);
-    st.towers = st.towers.filter((t) => t.id !== source.id && t.id !== target.id);
-    st.towers.push(fused);
-    const fx = fused.x * CELL + CELL / 2;
-    const fy = fused.y * CELL + CELL / 2;
-    st.shockwaves.push({ x: fx, y: fy, radius: 4, maxRadius: 44, life: 520, maxLife: 520, color: TOWER_TYPES[result].color });
-    for (let i = 0; i < 34; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const sp = Math.random() * 0.22;
-      st.particles.push({ x: fx, y: fy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 520, maxLife: 520, color: TOWER_TYPES[result].color, size: 1.5 + Math.random() * 3 });
-    }
-    st.floatingTexts.push({ x: fx, y: fy - 20, text: TOWER_TYPES[result].name.toUpperCase(), color: TOWER_TYPES[result].color, life: 900, maxLife: 900, vy: -0.025, scale: 1.25 });
-    st.shake = Math.max(st.shake, 8);
-    st.inspectId = fused.id;
-    setMoney(st.money);
-    syncInspect();
-    setControlTab("selected");
-    showMessage(`Fused into ${TOWER_TYPES[result].name}!`);
-  }, [showMessage, syncInspect]);
-
-  const placeTower = useCallback((gridX: number, gridY: number) => {
-    const st = state.current;
-    const existing = st.towers.find((t) => t.x === gridX && t.y === gridY);
-
-    if (existing) {
-      st.inspectId = st.inspectId === existing.id ? 0 : existing.id;
+  const fuseTowers = useCallback(
+    (sourceId: number, targetId: number) => {
+      const st = state.current;
+      const source = st.towers.find((t) => t.id === sourceId);
+      const target = st.towers.find((t) => t.id === targetId);
+      if (!source || !target || source.id === target.id) return;
+      const result = fusionFor(source.type, target.type);
+      if (!result) {
+        showMessage("Those towers cannot fuse");
+        return;
+      }
+      const cost = 75;
+      if (st.money < cost) {
+        showMessage(`Fusion costs ${cost}g`);
+        return;
+      }
+      st.money -= cost;
+      const level = Math.max(1, Math.min(MAX_LEVEL, Math.max(source.level, target.level)));
+      const fused: Tower = {
+        id: nextId++,
+        x: target.x,
+        y: target.y,
+        type: result,
+        level,
+        range: 0,
+        damage: 0,
+        fireRate: 0,
+        cooldown: 0,
+        color: "#fff",
+        invested: source.invested + target.invested + cost,
+        angle: -Math.PI / 2,
+        flash: 200,
+      };
+      applyStats(fused);
+      st.towers = st.towers.filter((t) => t.id !== source.id && t.id !== target.id);
+      st.towers.push(fused);
+      const fx = fused.x * CELL + CELL / 2;
+      const fy = fused.y * CELL + CELL / 2;
+      st.shockwaves.push({
+        x: fx,
+        y: fy,
+        radius: 4,
+        maxRadius: 44,
+        life: 520,
+        maxLife: 520,
+        color: TOWER_TYPES[result].color,
+      });
+      for (let i = 0; i < 34; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = Math.random() * 0.22;
+        st.particles.push({
+          x: fx,
+          y: fy,
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp,
+          life: 520,
+          maxLife: 520,
+          color: TOWER_TYPES[result].color,
+          size: 1.5 + Math.random() * 3,
+        });
+      }
+      st.floatingTexts.push({
+        x: fx,
+        y: fy - 20,
+        text: TOWER_TYPES[result].name.toUpperCase(),
+        color: TOWER_TYPES[result].color,
+        life: 900,
+        maxLife: 900,
+        vy: -0.025,
+        scale: 1.25,
+      });
+      st.shake = Math.max(st.shake, 8);
+      playSound("fusion");
+      st.inspectId = fused.id;
+      setMoney(st.money);
       syncInspect();
-      setControlTab(st.inspectId ? "selected" : "build");
-      return;
-    }
-    if (PATH.some((p, i) => {
-      const n = PATH[i + 1];
-      if (!n) return p.x === gridX && p.y === gridY;
-      if (p.x === n.x && p.x === gridX) return gridY >= Math.min(p.y, n.y) && gridY <= Math.max(p.y, n.y);
-      if (p.y === n.y && p.y === gridY) return gridX >= Math.min(p.x, n.x) && gridX <= Math.max(p.x, n.x);
-      return false;
-    })) return;
-    const s = TOWER_TYPES[selectedRef.current];
-    if (st.money < s.cost) {
-      showMessage("Not enough gold!");
-      return;
-    }
-    const tower: Tower = {
-      id: nextId++, x: gridX, y: gridY, type: selectedRef.current, level: 1,
-      range: s.range, damage: s.damage, fireRate: s.fireRate, cooldown: 0,
-      color: s.color, invested: s.cost, angle: -Math.PI / 2, flash: 0,
+      setControlTab("selected");
+      showMessage(`Fused into ${TOWER_TYPES[result].name}!`);
+    },
+    [playSound, showMessage, syncInspect],
+  );
+
+  const placeTower = useCallback(
+    (gridX: number, gridY: number) => {
+      const st = state.current;
+      const existing = st.towers.find((t) => t.x === gridX && t.y === gridY);
+
+      if (existing) {
+        st.inspectId = st.inspectId === existing.id ? 0 : existing.id;
+        syncInspect();
+        setControlTab(st.inspectId ? "selected" : "build");
+        return;
+      }
+      if (
+        PATH.some((p, i) => {
+          const n = PATH[i + 1];
+          if (!n) return p.x === gridX && p.y === gridY;
+          if (p.x === n.x && p.x === gridX)
+            return gridY >= Math.min(p.y, n.y) && gridY <= Math.max(p.y, n.y);
+          if (p.y === n.y && p.y === gridY)
+            return gridX >= Math.min(p.x, n.x) && gridX <= Math.max(p.x, n.x);
+          return false;
+        })
+      )
+        return;
+      const s = TOWER_TYPES[selectedRef.current];
+      if (st.money < s.cost) {
+        showMessage("Not enough gold!");
+        return;
+      }
+      const tower: Tower = {
+        id: nextId++,
+        x: gridX,
+        y: gridY,
+        type: selectedRef.current,
+        level: 1,
+        range: s.range,
+        damage: s.damage,
+        fireRate: s.fireRate,
+        cooldown: 0,
+        color: s.color,
+        invested: s.cost,
+        angle: -Math.PI / 2,
+        flash: 0,
+      };
+      st.towers.push(tower);
+      st.towersBuilt += 1;
+      playSound("button");
+      st.inspectId = tower.id;
+      st.money -= s.cost;
+      setMoney(st.money);
+      syncInspect();
+      setControlTab("selected");
+    },
+    [playSound, showMessage, syncInspect],
+  );
+
+  const restartGame = useCallback(() => {
+    const st = state.current;
+    st.enemies = [];
+    st.towers = [];
+    st.projectiles = [];
+    st.particles = [];
+    st.floatingTexts = [];
+    st.shockwaves = [];
+    st.isPlaying = false;
+    st.paused = false;
+    st.lives = 20;
+    st.money = 120;
+    st.wave = 0;
+    st.toSpawn = 0;
+    st.spawnQueue = [];
+    st.inspectId = 0;
+    st.kills = 0;
+    st.combo = 0;
+    st.goldEarned = 0;
+    st.bossKills = 0;
+    st.towersBuilt = 0;
+    setLives(20);
+    setMoney(120);
+    setWave(0);
+    setIsPlaying(false);
+    setPaused(false);
+    setEnemiesRemaining(0);
+    setInspected(null);
+    setControlTab("build");
+    setRunStats({ kills: 0, goldEarned: 0, bossKills: 0, towersBuilt: 0 });
+    setGameOverWave(null);
+    showMessage("Command center reset. Build your defense.");
+  }, [showMessage]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.hidden && state.current.isPlaying && !state.current.paused) {
+        state.current.paused = true;
+        setPaused(true);
+        showMessage("Paused while the app is in the background");
+      }
     };
-    st.towers.push(tower);
-    st.inspectId = tower.id;
-    st.money -= s.cost;
-    setMoney(st.money);
-    syncInspect();
-    setControlTab("selected");
-  }, [showMessage, syncInspect]);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [showMessage]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -477,7 +865,13 @@ export function TowerDefenseGame() {
       return { x, y };
     };
 
-    let pointerStart: { x: number; y: number; gridX: number; gridY: number; sourceId: number } | null = null;
+    let pointerStart: {
+      x: number;
+      y: number;
+      gridX: number;
+      gridY: number;
+      sourceId: number;
+    } | null = null;
     const handlePointerDown = (e: PointerEvent) => {
       const { x, y } = toGrid(e.clientX, e.clientY);
       if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return;
@@ -488,7 +882,10 @@ export function TowerDefenseGame() {
     const handlePointerMove = (e: PointerEvent) => {
       const { x, y } = toGrid(e.clientX, e.clientY);
       state.current.hover = x >= 0 && x < COLS && y >= 0 && y < ROWS ? { x, y } : null;
-      if (pointerStart?.sourceId && Math.hypot(e.clientX - pointerStart.x, e.clientY - pointerStart.y) > 8) {
+      if (
+        pointerStart?.sourceId &&
+        Math.hypot(e.clientX - pointerStart.x, e.clientY - pointerStart.y) > 8
+      ) {
         state.current.dragSourceId = pointerStart.sourceId;
         state.current.dragActive = true;
         state.current.dragTarget = state.current.hover;
@@ -499,7 +896,8 @@ export function TowerDefenseGame() {
       const { x, y } = toGrid(e.clientX, e.clientY);
       if (state.current.dragActive) {
         const target = state.current.towers.find((t) => t.x === x && t.y === y);
-        if (target && target.id !== pointerStart.sourceId) fuseTowers(pointerStart.sourceId, target.id);
+        if (target && target.id !== pointerStart.sourceId)
+          fuseTowers(pointerStart.sourceId, target.id);
         else showMessage("Drop onto another tower to fuse");
       } else if (x >= 0 && x < COLS && y >= 0 && y < ROWS) {
         placeTower(x, y);
@@ -509,7 +907,9 @@ export function TowerDefenseGame() {
       state.current.dragActive = false;
       pointerStart = null;
     };
-    const handleLeave = () => { if (!pointerStart) state.current.hover = null; };
+    const handleLeave = () => {
+      if (!pointerStart) state.current.hover = null;
+    };
 
     canvas.addEventListener("pointerdown", handlePointerDown);
     canvas.addEventListener("pointermove", handlePointerMove);
@@ -522,18 +922,41 @@ export function TowerDefenseGame() {
         const a = Math.random() * Math.PI * 2;
         const s = Math.random() * power;
         state.current.particles.push({
-          x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
-          life: 400, maxLife: 400, color, size: 1.5 + Math.random() * 2,
+          x,
+          y,
+          vx: Math.cos(a) * s,
+          vy: Math.sin(a) * s,
+          life: 400,
+          maxLife: 400,
+          color,
+          size: 1.5 + Math.random() * 2,
         });
       }
     };
 
     const burstRing = (x: number, y: number, color: string, radius = 22, life = 260) => {
-      state.current.shockwaves.push({ x, y, radius: 4, maxRadius: radius, life, maxLife: life, color });
+      state.current.shockwaves.push({
+        x,
+        y,
+        radius: 4,
+        maxRadius: radius,
+        life,
+        maxLife: life,
+        color,
+      });
     };
 
     const floatText = (x: number, y: number, text: string, color: string, scale = 1) => {
-      state.current.floatingTexts.push({ x, y, text, color, life: 650, maxLife: 650, vy: -0.035, scale });
+      state.current.floatingTexts.push({
+        x,
+        y,
+        text,
+        color,
+        life: 650,
+        maxLife: 650,
+        vy: -0.035,
+        scale,
+      });
     };
 
     const spawnEnemy = () => {
@@ -545,12 +968,32 @@ export function TowerDefenseGame() {
       const speed = (0.0015 + state.current.wave * 0.00005) * es.speed;
       const enemyId = nextId++;
       state.current.enemies.push({
-        id: enemyId, type, cls: es.cls, size: es.size, pathIndex: 0, progress: 0,
-        x: start.x * CELL + CELL / 2, y: start.y * CELL + CELL / 2, angle: 0,
-        hp, maxHp: hp, speed, reward: es.reward + state.current.wave,
-        frozen: 0, slowFactor: 1, hurt: 0,
+        id: enemyId,
+        type,
+        cls: es.cls,
+        size: es.size,
+        pathIndex: 0,
+        progress: 0,
+        x: start.x * CELL + CELL / 2,
+        y: start.y * CELL + CELL / 2,
+        angle: 0,
+        hp,
+        maxHp: hp,
+        speed,
+        reward: es.reward + state.current.wave,
+        frozen: 0,
+        slowFactor: 1,
+        hurt: 0,
       });
-      state.current.shockwaves.push({ x: start.x * CELL + CELL / 2, y: start.y * CELL + CELL / 2, radius: 3, maxRadius: type === "titan" ? 24 : 13, life: 260, maxLife: 260, color: es.tint });
+      state.current.shockwaves.push({
+        x: start.x * CELL + CELL / 2,
+        y: start.y * CELL + CELL / 2,
+        radius: 3,
+        maxRadius: type === "titan" ? 24 : 13,
+        life: 260,
+        maxLife: 260,
+        color: es.tint,
+      });
     };
 
     const update = (dt: number) => {
@@ -578,6 +1021,14 @@ export function TowerDefenseGame() {
         st.money += 25 + st.wave * 5;
         setMoney(st.money);
         showMessage(`Wave ${st.wave} cleared! +${25 + st.wave * 5}g`);
+        st.goldEarned += 25 + st.wave * 5;
+        setRunStats({
+          kills: st.kills,
+          goldEarned: st.goldEarned,
+          bossKills: st.bossKills,
+          towersBuilt: st.towersBuilt,
+        });
+        playSound("waveClear");
         st.banner = 1050;
         st.bannerText = `WAVE ${st.wave} CLEAR`;
         st.bannerColor = "#3ddc84";
@@ -603,6 +1054,7 @@ export function TowerDefenseGame() {
           burst(enemy.x, enemy.y, "#ff5d5d", 12, 0.12);
           burstRing(enemy.x, enemy.y, "#ff5d5d", 22, 260);
           floatText(enemy.x, enemy.y - 16, "-1 LIFE", "#ff5d5d", 1.0);
+          playSound("lifeLost");
           enemy.hp = 0;
           return;
         }
@@ -635,15 +1087,24 @@ export function TowerDefenseGame() {
           tower.angle = Math.atan2(target.e.y - cy, target.e.x - cx);
           if (tower.cooldown <= 0) {
             st.projectiles.push({
-              id: nextId++, x: cx, y: cy, target: target.e,
-              damage: tower.damage, speed: 0.9, type: tower.type,
-              splashRadius: s.splash * CELL, slow: s.slow, slowDur: s.slowDur, hit: false,
+              id: nextId++,
+              x: cx,
+              y: cy,
+              target: target.e,
+              damage: tower.damage,
+              speed: 0.9,
+              type: tower.type,
+              splashRadius: s.splash * CELL,
+              slow: s.slow,
+              slowDur: s.slowDur,
+              hit: false,
             });
             tower.cooldown = tower.fireRate;
             tower.flash = 120;
             const muzzleX = cx + Math.cos(tower.angle) * CELL * 0.38;
             const muzzleY = cy + Math.sin(tower.angle) * CELL * 0.38;
-            burst(muzzleX, muzzleY, tower.color, 4, 0.10);
+            burst(muzzleX, muzzleY, tower.color, 4, 0.1);
+            if (st.projectiles.length < 64) playSound("attack");
           }
         }
       });
@@ -668,10 +1129,20 @@ export function TowerDefenseGame() {
             const dealt = p.damage * mult;
             e.hp -= dealt;
             e.hurt = 160;
-            floatText(e.x, e.y - 10, `-${Math.round(dealt)}`, mult >= 1.4 ? "#ffe066" : "#ffffff", mult >= 1.4 ? 1.05 : 0.9);
-            if (p.slowDur > 0) { e.frozen = p.slowDur; e.slowFactor = p.slow; }
+            floatText(
+              e.x,
+              e.y - 10,
+              `-${Math.round(dealt)}`,
+              mult >= 1.4 ? "#ffe066" : "#ffffff",
+              mult >= 1.4 ? 1.05 : 0.9,
+            );
+            if (p.slowDur > 0) {
+              e.frozen = p.slowDur;
+              e.slowFactor = p.slow;
+            }
             if (mult >= 1.4) burst(e.x, e.y, "#ffe066", 6, 0.09);
             else if (mult <= 0.7) burst(e.x, e.y, "#8a97b0", 3, 0.04);
+            if (st.floatingTexts.length < 32) playSound("hit");
           };
           if (p.splashRadius > 0) {
             st.enemies.forEach((e) => {
@@ -692,16 +1163,34 @@ export function TowerDefenseGame() {
       const killed = st.enemies.filter((e) => e.hp <= 0);
       killed.forEach((e) => {
         st.money += e.reward;
+        st.goldEarned += e.reward;
         st.kills += 1;
         st.combo += 1;
         st.comboTimer = 1800;
         burst(e.x, e.y, "#ffd166", e.type === "titan" ? 24 : 10, e.type === "titan" ? 0.18 : 0.1);
-        burstRing(e.x, e.y, e.type === "titan" ? "#ff3b7b" : "#ffd166", e.type === "titan" ? 34 : 16, e.type === "titan" ? 420 : 220);
+        burstRing(
+          e.x,
+          e.y,
+          e.type === "titan" ? "#ff3b7b" : "#ffd166",
+          e.type === "titan" ? 34 : 16,
+          e.type === "titan" ? 420 : 220,
+        );
         floatText(e.x, e.y - 16, `+${e.reward}g`, "#ffd166", e.type === "titan" ? 1.2 : 0.85);
-        if (st.combo >= 3 && e.type !== "titan") floatText(e.x, e.y - 29, `${st.combo}x COMBO`, "#ffffff", 0.72);
+        if (st.combo >= 3 && e.type !== "titan")
+          floatText(e.x, e.y - 29, `${st.combo}x COMBO`, "#ffffff", 0.72);
         if (e.type === "titan") st.shake = Math.max(st.shake, 10);
+        if (e.type === "titan") st.bossKills += 1;
+        playSound(e.type === "titan" ? "boss" : "kill");
       });
-      if (killed.length) setMoney(st.money);
+      if (killed.length) {
+        setMoney(st.money);
+        setRunStats({
+          kills: st.kills,
+          goldEarned: st.goldEarned,
+          bossKills: st.bossKills,
+          towersBuilt: st.towersBuilt,
+        });
+      }
       st.enemies = st.enemies.filter((e) => e.hp > 0);
       st.projectiles = st.projectiles.filter((p) => !p.hit);
 
@@ -713,14 +1202,20 @@ export function TowerDefenseGame() {
         pt.life -= dt;
       });
       st.particles = st.particles.filter((pt) => pt.life > 0);
-      st.floatingTexts.forEach((ft) => { ft.y += ft.vy * dt; ft.life -= dt; });
+      if (st.particles.length > 280) st.particles.splice(0, st.particles.length - 280);
+      st.floatingTexts.forEach((ft) => {
+        ft.y += ft.vy * dt;
+        ft.life -= dt;
+      });
       st.floatingTexts = st.floatingTexts.filter((ft) => ft.life > 0);
+      if (st.floatingTexts.length > 48) st.floatingTexts.splice(0, st.floatingTexts.length - 48);
       st.shockwaves.forEach((sw) => {
         sw.life -= dt;
         const p = 1 - Math.max(0, sw.life / sw.maxLife);
         sw.radius = 4 + (sw.maxRadius - 4) * p;
       });
       st.shockwaves = st.shockwaves.filter((sw) => sw.life > 0);
+      if (st.shockwaves.length > 36) st.shockwaves.splice(0, st.shockwaves.length - 36);
       st.banner = Math.max(0, st.banner - dt);
       st.dangerFlash = Math.max(0, st.dangerFlash - dt);
       st.shake *= Math.pow(0.88, dt / 16.67);
@@ -731,22 +1226,20 @@ export function TowerDefenseGame() {
         st.paused = false;
         setPaused(false);
         st.enemies = [];
-        st.towers = [];
         st.projectiles = [];
-        st.lives = 20;
-        st.money = 120;
-        st.wave = 0;
         st.toSpawn = 0;
         st.inspectId = 0;
         setBest((b) => Math.max(b, reached));
-        setLives(20);
-        setMoney(120);
-        setWave(0);
+        setRunStats({
+          kills: st.kills,
+          goldEarned: st.goldEarned,
+          bossKills: st.bossKills,
+          towersBuilt: st.towersBuilt,
+        });
+        setGameOverWave(reached);
         setIsPlaying(false);
         setEnemiesRemaining(0);
-        setInspected(null);
-        setControlTab("build");
-        showMessage(`Game Over at wave ${reached}! Restarting...`);
+        showMessage(`Base lost on wave ${reached}. Review your run and deploy again.`);
       }
     };
 
@@ -800,15 +1293,21 @@ export function TowerDefenseGame() {
       ctx.strokeStyle = "rgba(255,255,255,0.04)";
       ctx.lineWidth = 1;
       for (let x = 1; x < COLS; x++) {
-        ctx.beginPath(); ctx.moveTo(x * CELL, 0); ctx.lineTo(x * CELL, H); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x * CELL, 0);
+        ctx.lineTo(x * CELL, H);
+        ctx.stroke();
       }
       for (let y = 1; y < ROWS; y++) {
-        ctx.beginPath(); ctx.moveTo(0, y * CELL); ctx.lineTo(W, y * CELL); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, y * CELL);
+        ctx.lineTo(W, y * CELL);
+        ctx.stroke();
       }
       ctx.save();
       ctx.globalAlpha = 0.22;
       for (let i = 0; i < 26; i++) {
-        const px = ((i * 83 + st.time * (0.004 + (i % 3) * 0.001)) % W);
+        const px = (i * 83 + st.time * (0.004 + (i % 3) * 0.001)) % W;
         const py = (i * 47) % H;
         ctx.fillStyle = i % 4 === 0 ? "#6ea8ff" : "#ffffff";
         ctx.fillRect(px, py, 1, 1);
@@ -820,22 +1319,26 @@ export function TowerDefenseGame() {
         PATH.forEach((p, i) => {
           const px = p.x * CELL + CELL / 2;
           const py = p.y * CELL + CELL / 2;
-          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
         });
       };
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.lineWidth = CELL * 0.72;
       ctx.strokeStyle = "rgba(90,130,200,0.18)";
-      tracePath(); ctx.stroke();
+      tracePath();
+      ctx.stroke();
       ctx.lineWidth = CELL * 0.56;
       ctx.strokeStyle = "#1d2b45";
-      tracePath(); ctx.stroke();
+      tracePath();
+      ctx.stroke();
       ctx.lineWidth = 1.5;
       ctx.setLineDash([6, 8]);
       ctx.lineDashOffset = -(st.time * 0.02) % 14;
       ctx.strokeStyle = "rgba(140,180,255,0.35)";
-      tracePath(); ctx.stroke();
+      tracePath();
+      ctx.stroke();
       ctx.setLineDash([]);
 
       const start = PATH[0];
@@ -880,7 +1383,12 @@ export function TowerDefenseGame() {
         const cx = tower.x * CELL + CELL / 2;
         const cy = tower.y * CELL + CELL / 2;
 
-        if (st.dragActive && source && tower.id !== source.id && fusionFor(source.type, tower.type)) {
+        if (
+          st.dragActive &&
+          source &&
+          tower.id !== source.id &&
+          fusionFor(source.type, tower.type)
+        ) {
           ctx.save();
           ctx.globalAlpha = 0.5 + 0.3 * Math.sin(st.time * 0.008);
           const isTarget = st.dragTarget?.x === tower.x && st.dragTarget?.y === tower.y;
@@ -1223,27 +1731,38 @@ export function TowerDefenseGame() {
       canvas.removeEventListener("pointercancel", handlePointerUp);
       canvas.removeEventListener("pointerleave", handleLeave);
     };
-  }, [fuseTowers, placeTower, showMessage]);
+  }, [fuseTowers, placeTower, playSound, showMessage, startWave]);
 
-  const buildable = (Object.keys(TOWER_TYPES) as TowerType[]).filter((t) => TOWER_TYPES[t].buildable);
+  const buildable = (Object.keys(TOWER_TYPES) as TowerType[]).filter(
+    (t) => TOWER_TYPES[t].buildable,
+  );
   const insSpec = inspected ? TOWER_TYPES[inspected.type] : null;
   const insUpCost = inspected ? upgradeCost(inspected) : 0;
 
   return (
-    <div className="grid h-[100dvh] w-full grid-rows-[42px_minmax(0,1fr)_166px_42px] gap-1.5 overflow-hidden bg-background p-2 text-foreground">
+    <div className="td-app relative grid h-[100dvh] w-full grid-rows-[48px_minmax(0,1fr)_174px_48px] gap-1.5 overflow-hidden bg-background p-2 text-foreground">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
         <div className="grid min-w-0 grid-cols-3 gap-1.5 text-center">
           <div className="rounded-lg border border-gold/20 bg-muted px-2 py-1 shadow-sm">
-            <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Gold</div>
+            <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Gold
+            </div>
             <div className="text-sm font-bold text-gold">{money}</div>
           </div>
           <div className="rounded-lg border border-lives/20 bg-muted px-2 py-1 shadow-sm">
-            <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Lives</div>
+            <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Lives
+            </div>
             <div className="text-sm font-bold text-lives">{lives}</div>
           </div>
           <div className="rounded-lg border border-wave/20 bg-muted px-2 py-1 shadow-sm">
-            <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Wave</div>
-            <div className="text-sm font-bold text-wave">{wave}{best > 0 ? ` · ${best}` : ""}</div>
+            <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Wave
+            </div>
+            <div className="text-sm font-bold text-wave">
+              {wave}
+              {best > 0 ? ` · ${best}` : ""}
+            </div>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -1252,7 +1771,9 @@ export function TowerDefenseGame() {
               key={s}
               onClick={() => setSpeed(s)}
               className={`rounded-md px-1.5 py-1.5 text-[11px] font-bold transition-all ${
-                speed === s ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                speed === s
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground"
               }`}
             >
               {s}x
@@ -1268,12 +1789,24 @@ export function TowerDefenseGame() {
             onClick={() => setAutoStart((a) => !a)}
             aria-pressed={autoStart}
             className={`rounded-md px-2 py-1.5 text-[10px] font-bold transition-all ${
-              autoStart
-                ? "bg-gold text-background"
-                : "bg-muted text-muted-foreground"
+              autoStart ? "bg-gold text-background" : "bg-muted text-muted-foreground"
             }`}
           >
             Auto
+          </button>
+          <button
+            onClick={() => setSoundOn((on) => !on)}
+            aria-label={soundOn ? "Mute sound" : "Enable sound"}
+            aria-pressed={soundOn}
+            className="rounded-md bg-muted px-2 py-1.5 text-[10px] font-bold text-muted-foreground"
+          >
+            {soundOn ? "SFX on" : "SFX off"}
+          </button>
+          <button
+            onClick={() => setLobbyOpen(true)}
+            className="rounded-md bg-muted px-2 py-1.5 text-[10px] font-bold text-muted-foreground"
+          >
+            1v1
           </button>
         </div>
       </div>
@@ -1311,80 +1844,224 @@ export function TowerDefenseGame() {
         </div>
 
         <div className="min-h-0 overflow-y-auto pt-1.5">
-        {controlTab === "selected" && inspected && insSpec ? (
-          <div className="px-0.5">
-            <div className="flex items-center gap-2">
-              <img src={TOWER_ART[inspected.type]} alt={insSpec.name} loading="lazy" width={48} height={48} className="h-7 w-7 shrink-0 object-contain" />
-              <span className="truncate text-sm font-bold">{insSpec.name}</span>
-              <span className="shrink-0 rounded-md bg-primary/20 px-1.5 py-0.5 text-[10px] font-bold text-primary">Lv {inspected.level}</span>
-              <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
-                dmg {inspected.damage} · rng {inspected.range.toFixed(1)} · {(1000 / inspected.fireRate).toFixed(2)}/s
-              </span>
-            </div>
-            <div className="mt-1 flex items-center gap-2 text-[9px] text-muted-foreground">
-              <span>Sell value {Math.round(inspected.invested * 0.6)}g</span>
-              <span>•</span>
-              <span>{insSpec.desc}</span>
-              {inspected.level < MAX_LEVEL && <span className="ml-auto text-gold">Next: +{Math.max(1, Math.round(inspected.damage * 0.45))} dmg</span>}
-            </div>
-            <div className="mt-2 grid grid-cols-3 gap-1">
-              <button
-                onClick={upgrade}
-                disabled={inspected.level >= MAX_LEVEL}
-                className="rounded-md bg-primary px-2 py-2 text-xs font-bold text-primary-foreground disabled:opacity-50"
-              >
-                {inspected.level >= MAX_LEVEL ? "Max level" : `Upgrade ${insUpCost}g`}
-              </button>
-              <button
-                onClick={sell}
-                className="rounded-md border border-border bg-muted px-1 py-2 text-[11px] font-bold text-foreground"
-              >
-                Sell {Math.round(inspected.invested * 0.6)}g
-              </button>
-              <div className="grid place-items-center rounded-md bg-muted px-1 text-center text-[9px] leading-tight text-muted-foreground">Drag onto a compatible tower · 75g</div>
-            </div>
-          </div>
-        ) : controlTab === "guide" ? (
-          <div className="grid grid-cols-2 gap-1 px-0.5 text-[9px] text-muted-foreground sm:grid-cols-3">
-            {Object.entries(FUSIONS).map(([combo, result]) => (
-              <div key={combo} className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-1 rounded-md bg-muted/60 p-1">
-                <img src={TOWER_ART[result]} alt={TOWER_TYPES[result].name} loading="lazy" width={32} height={32} className="h-6 w-6 object-contain" />
-                <span className="min-w-0"><b className="block truncate text-foreground">{TOWER_TYPES[result].name}</b>{combo.replace("+", " + ")}</span>
+          {controlTab === "selected" && inspected && insSpec ? (
+            <div className="px-0.5">
+              <div className="flex items-center gap-2">
+                <img
+                  src={TOWER_ART[inspected.type]}
+                  alt={insSpec.name}
+                  loading="lazy"
+                  width={48}
+                  height={48}
+                  className="h-7 w-7 shrink-0 object-contain"
+                />
+                <span className="truncate text-sm font-bold">{insSpec.name}</span>
+                <span className="shrink-0 rounded-md bg-primary/20 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                  Lv {inspected.level}
+                </span>
+                <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                  dmg {inspected.damage} · rng {inspected.range.toFixed(1)} ·{" "}
+                  {(1000 / inspected.fireRate).toFixed(2)}/s
+                </span>
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-4 gap-1.5">
-            {buildable.map((type) => {
-              const s = TOWER_TYPES[type];
-              const disabled = money < s.cost;
-              return (
+              <div className="mt-1 flex items-center gap-2 text-[9px] text-muted-foreground">
+                <span>Sell value {Math.round(inspected.invested * 0.6)}g</span>
+                <span>•</span>
+                <span>{insSpec.desc}</span>
+                {inspected.level < MAX_LEVEL && (
+                  <span className="ml-auto text-gold">
+                    Next: +{Math.max(1, Math.round(inspected.damage * 0.45))} dmg
+                  </span>
+                )}
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-1">
                 <button
-                  key={type}
-                  onClick={() => { setSelectedTower(type); setControlTab("build"); }}
-                  className={`flex flex-col items-center rounded-md border p-1 transition-all ${
-                    selectedTower === type ? "border-primary bg-primary/10 ring-2 ring-primary/40" : "border-border bg-muted"
-                  } ${disabled ? "opacity-50" : ""}`}
+                  onClick={upgrade}
+                  disabled={inspected.level >= MAX_LEVEL}
+                  className="rounded-md bg-primary px-2 py-2 text-xs font-bold text-primary-foreground disabled:opacity-50"
                 >
-                  <img src={TOWER_ART[type]} alt={s.name} loading="lazy" width={64} height={64} className="h-8 w-8 object-contain" />
-                  <span className="text-[11px] font-semibold leading-tight">{s.name}</span>
-                  <span className="text-[9px] text-muted-foreground">{s.cost}g · rng {s.range.toFixed(1)}</span>
-                  <span className="text-[9px] font-semibold text-gold">vs {bestVs(type)}</span>
+                  {inspected.level >= MAX_LEVEL ? "Max level" : `Upgrade ${insUpCost}g`}
                 </button>
-              );
-            })}
-          </div>
-        )}
+                <button
+                  onClick={sell}
+                  className="rounded-md border border-border bg-muted px-1 py-2 text-[11px] font-bold text-foreground"
+                >
+                  Sell {Math.round(inspected.invested * 0.6)}g
+                </button>
+                <div className="grid place-items-center rounded-md bg-muted px-1 text-center text-[9px] leading-tight text-muted-foreground">
+                  Drag onto a compatible tower · 75g
+                </div>
+              </div>
+            </div>
+          ) : controlTab === "guide" ? (
+            <div className="grid grid-cols-2 gap-1 px-0.5 text-[9px] text-muted-foreground sm:grid-cols-3">
+              {Object.entries(FUSIONS).map(([combo, result]) => (
+                <div
+                  key={combo}
+                  className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-1 rounded-md bg-muted/60 p-1"
+                >
+                  <img
+                    src={TOWER_ART[result]}
+                    alt={TOWER_TYPES[result].name}
+                    loading="lazy"
+                    width={32}
+                    height={32}
+                    className="h-6 w-6 object-contain"
+                  />
+                  <span className="min-w-0">
+                    <b className="block truncate text-foreground">{TOWER_TYPES[result].name}</b>
+                    {combo.replace("+", " + ")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-4 gap-1.5">
+              {buildable.map((type) => {
+                const s = TOWER_TYPES[type];
+                const disabled = money < s.cost;
+                return (
+                  <button
+                    key={type}
+                    onClick={() => {
+                      setSelectedTower(type);
+                      setControlTab("build");
+                    }}
+                    className={`flex flex-col items-center rounded-md border p-1 transition-all ${
+                      selectedTower === type
+                        ? "border-primary bg-primary/10 ring-2 ring-primary/40"
+                        : "border-border bg-muted"
+                    } ${disabled ? "opacity-50" : ""}`}
+                  >
+                    <img
+                      src={TOWER_ART[type]}
+                      alt={s.name}
+                      loading="lazy"
+                      width={64}
+                      height={64}
+                      className="h-8 w-8 object-contain"
+                    />
+                    <span className="text-[11px] font-semibold leading-tight">{s.name}</span>
+                    <span className="text-[9px] text-muted-foreground">
+                      {s.cost}g · rng {s.range.toFixed(1)}
+                    </span>
+                    <span className="text-[9px] font-semibold text-gold">vs {bestVs(type)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
       <button
         onClick={startWave}
-        disabled={isPlaying}
+        disabled={isPlaying || gameOverWave !== null}
         className="w-full rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground transition-colors disabled:opacity-50"
       >
-        {wave === 0 ? "Start Game" : isPlaying ? `Wave ${wave} — ${enemiesRemaining} left` : `Start Wave ${wave + 1}`}
+        {gameOverWave !== null
+          ? "Run ended — restart below"
+          : wave === 0
+            ? "Start Game"
+            : isPlaying
+              ? `Wave ${wave} — ${enemiesRemaining} left`
+              : `Start Wave ${wave + 1}`}
       </button>
+      {gameOverWave !== null && (
+        <div
+          className="absolute inset-0 z-20 grid place-items-center bg-slate-950/70 p-5 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Run complete"
+        >
+          <div className="w-full max-w-sm rounded-2xl border border-lives/50 bg-card p-5 text-center shadow-2xl">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-lives">
+              Command center lost
+            </p>
+            <h2 className="mt-1 text-3xl font-black">Wave {gameOverWave}</h2>
+            <div className="my-4 grid grid-cols-2 gap-2 text-left text-xs">
+              <div className="rounded-lg bg-muted p-2">
+                <b className="block text-gold">{runStats.goldEarned}g</b>earned
+              </div>
+              <div className="rounded-lg bg-muted p-2">
+                <b className="block">{runStats.kills}</b>eliminations
+              </div>
+              <div className="rounded-lg bg-muted p-2">
+                <b className="block">{runStats.towersBuilt}</b>towers deployed
+              </div>
+              <div className="rounded-lg bg-muted p-2">
+                <b className="block text-lives">{runStats.bossKills}</b>titans defeated
+              </div>
+            </div>
+            <button
+              onClick={restartGame}
+              className="min-h-12 w-full rounded-xl bg-primary px-4 text-sm font-black text-primary-foreground"
+            >
+              Deploy again
+            </button>
+          </div>
+        </div>
+      )}
+      {lobbyOpen && (
+        <div
+          className="absolute inset-0 z-20 grid place-items-center bg-slate-950/70 p-5 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="1v1 lobby"
+        >
+          <div className="w-full max-w-sm rounded-2xl border border-wave/40 bg-card p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-wave">
+                  Online 1v1
+                </p>
+                <h2 className="text-xl font-black">Battle lobby</h2>
+              </div>
+              <button
+                onClick={() => setLobbyOpen(false)}
+                className="min-h-10 min-w-10 rounded-lg bg-muted font-bold"
+                aria-label="Close lobby"
+              >
+                ×
+              </button>
+            </div>
+            {multiplayerConfigured() ? (
+              <p className="mt-3 text-sm text-muted-foreground">
+                Network service detected. Room connection is ready to be wired to the authoritative
+                match server.
+              </p>
+            ) : (
+              <p className="mt-3 rounded-lg border border-gold/30 bg-gold/10 p-3 text-sm text-foreground">
+                Online service is not configured. Add{" "}
+                <code className="font-bold">VITE_MULTIPLAYER_URL</code> when an authoritative
+                WebSocket backend is deployed; no fake opponent is used.
+              </p>
+            )}
+            <label className="mt-4 block text-xs font-bold text-muted-foreground">Room code</label>
+            <input
+              value={roomCode}
+              onChange={(event) => setRoomCode(normalizeRoomCode(event.target.value))}
+              placeholder="CREATE OR JOIN"
+              maxLength={6}
+              className="mt-1 min-h-12 w-full rounded-lg border border-border bg-muted px-3 font-mono font-bold tracking-[0.25em] outline-none focus:border-wave"
+            />
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                disabled={!multiplayerConfigured()}
+                className="min-h-12 rounded-xl bg-primary text-sm font-bold text-primary-foreground disabled:opacity-40"
+              >
+                Create room
+              </button>
+              <button
+                disabled={!multiplayerConfigured() || roomCode.length !== 6}
+                className="min-h-12 rounded-xl border border-border bg-muted text-sm font-bold disabled:opacity-40"
+              >
+                Join room
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
